@@ -2,8 +2,8 @@ import click
 import os
 import torch
 import gc
-from pathlib import Path
 from rich.console import Console
+from llm_profiler import __version__
 from llm_profiler.profiler import load_model, measure_throughput, get_vram_usage, sweep_batch_sizes, find_oom_limit, measure_prefill_decode, profile_memory_breakdown, measure_output_length_impact
 from llm_profiler.validation import validate_model_exists, validate_compare_models
 from llm_profiler.utils import create_quantization_config, check_disk_space, manage_cache_size
@@ -15,7 +15,7 @@ def profile_single_model(model, quantization, max_batch_size, max_new_tokens, de
     """Profiles a single model and returns the results dictionary."""
     console.print(f"🔍 Profiling {model}...")
     
-    # CPU Check (Phase 10)
+    # CPU Check
     if device == "cpu" or (device == "auto" and not torch.cuda.is_available()):
         if max_batch_size > 4:
             console.print("⚠️  Running on CPU. Reducing max batch size to 4 to prevent hanging.", style="yellow")
@@ -130,7 +130,7 @@ def profile_single_model(model, quantization, max_batch_size, max_new_tokens, de
     # 5. Report Generation
     console.print("[5/5] Generating report...", style="bold blue")
     try:
-        # Generate Plots first (needed for HTML/MD)
+        # Generate Plots first
         plot_tp = plot_throughput(results, cache_dir, model, quantization)
         console.print(f"✓ Plot saved to: {plot_tp}", style="bold green")
         
@@ -164,6 +164,7 @@ def profile_single_model(model, quantization, max_batch_size, max_new_tokens, de
     return profiling_data
 
 @click.command()
+@click.version_option(version=__version__)
 @click.option("--model", required=False, callback=validate_model_exists, help="HuggingFace model name or local path.")
 @click.option("--quantization", type=click.Choice(["4bit", "8bit", "fp16", "none"]), default="none", help="Quantization level.")
 @click.option("--max-batch-size", type=click.IntRange(1, 512), default=128, help="Maximum batch size to test.")

@@ -1,7 +1,10 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 from click.testing import CliRunner
-from unittest.mock import patch, MagicMock
+
 from llm_profiler.cli import main
+
 
 @pytest.fixture
 def runner():

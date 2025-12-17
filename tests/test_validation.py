@@ -1,13 +1,13 @@
-import pytest
+from unittest.mock import MagicMock, patch
+
 import click
+import pytest
 import torch
-from unittest.mock import patch, MagicMock
-from huggingface_hub.utils import RepositoryNotFoundError, GatedRepoError
-import os
+from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 from transformers import BitsAndBytesConfig
 
-from llm_profiler.validation import validate_model_exists, validate_compare_models
 from llm_profiler.utils import create_quantization_config, generate_batch_sizes
+from llm_profiler.validation import validate_compare_models, validate_model_exists
 
 # --- Tests for validate_model_exists ---
 

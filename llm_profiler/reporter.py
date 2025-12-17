@@ -1,15 +1,20 @@
 import json
 import os
-import torch
-import psutil
+
 import matplotlib
+import psutil
+import torch
+
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
 import base64
 from datetime import datetime
 from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+
 from llm_profiler.profiler import calculate_kv_cache_size
+
 
 def get_system_info():
     """Gather system information."""
@@ -155,11 +160,11 @@ def plot_memory_breakdown(sweep_results, output_dir, model_name, quantization, m
     if max_val > 0:
         plt.ylim(0, max_val * 1.2)
     
-    p1 = plt.bar(x, weights, width, label='Weights', color='lightgray')
-    p2 = plt.bar(x, kv_caches, width, bottom=weights, label='KV Cache', color='skyblue')
+    _p1 = plt.bar(x, weights, width, label='Weights', color='lightgray')
+    _p2 = plt.bar(x, kv_caches, width, bottom=weights, label='KV Cache', color='skyblue')
     # Bottom for activations is weights + kv_caches
     bottom_act = [w + k for w, k in zip(weights, kv_caches)]
-    p3 = plt.bar(x, activations, width, bottom=bottom_act, label='Activations', color='salmon')
+    _p3 = plt.bar(x, activations, width, bottom=bottom_act, label='Activations', color='salmon')
     
     plt.xlabel('Batch Size')
     plt.ylabel('VRAM Usage (GB)')

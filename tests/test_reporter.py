@@ -1,9 +1,19 @@
-import pytest
 import json
 import os
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-from llm_profiler.reporter import save_json, get_system_info, plot_throughput, plot_memory_breakdown, save_comparison_json, plot_comparison_throughput, generate_html, generate_markdown
+from unittest.mock import MagicMock, patch
+
+from llm_profiler.reporter import (
+    generate_html,
+    generate_markdown,
+    get_system_info,
+    plot_comparison_throughput,
+    plot_memory_breakdown,
+    plot_throughput,
+    save_comparison_json,
+    save_json,
+)
+
 
 def test_get_system_info():
     with patch("torch.cuda.is_available", return_value=True), \

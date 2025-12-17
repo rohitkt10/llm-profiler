@@ -1,8 +1,9 @@
-import torch
 import os
 import shutil
-import psutil
+
+import torch
 from transformers import BitsAndBytesConfig
+
 
 def create_quantization_config(quantization: str):
     """

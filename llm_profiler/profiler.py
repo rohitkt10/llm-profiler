@@ -1,8 +1,11 @@
-import time
-import torch
 import gc
+import time
+
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 from llm_profiler.utils import generate_batch_sizes
+
 
 def get_vram_usage() -> float:
     """Returns the current VRAM usage in GB."""

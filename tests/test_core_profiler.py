@@ -1,7 +1,16 @@
-import pytest
-import torch
 from unittest.mock import MagicMock, patch
-from llm_profiler.profiler import sweep_batch_sizes, find_oom_limit, measure_prefill_decode, calculate_kv_cache_size, profile_memory_breakdown, measure_output_length_impact
+
+import torch
+
+from llm_profiler.profiler import (
+    calculate_kv_cache_size,
+    find_oom_limit,
+    measure_output_length_impact,
+    measure_prefill_decode,
+    profile_memory_breakdown,
+    sweep_batch_sizes,
+)
+
 
 @patch("llm_profiler.profiler.measure_throughput")
 @patch("llm_profiler.profiler.get_vram_usage")

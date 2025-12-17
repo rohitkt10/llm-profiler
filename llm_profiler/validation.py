@@ -1,7 +1,9 @@
+import os
+
 import click
 from huggingface_hub import model_info
-from huggingface_hub.utils import RepositoryNotFoundError, GatedRepoError
-import os
+from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
+
 
 def validate_model_exists(ctx, param, value):
     """Validates that the model exists on HuggingFace Hub or locally."""
