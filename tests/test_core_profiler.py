@@ -1,7 +1,7 @@
 import pytest
 import torch
 from unittest.mock import MagicMock, patch
-from llm_profiler.profiler import sweep_batch_sizes, find_oom_limit, measure_prefill_decode, calculate_kv_cache_size, profile_memory_breakdown
+from llm_profiler.profiler import sweep_batch_sizes, find_oom_limit, measure_prefill_decode, calculate_kv_cache_size, profile_memory_breakdown, measure_output_length_impact
 
 @patch("llm_profiler.profiler.measure_throughput")
 @patch("llm_profiler.profiler.get_vram_usage")
@@ -182,3 +182,28 @@ def test_profile_memory_breakdown_cpu():
     
     assert stats["weights_gb"] == 0.0
     assert stats["total_gb"] == 0.0
+
+@patch("llm_profiler.profiler.measure_throughput")
+def test_measure_output_length_impact(mock_throughput):
+    """Test latency breakdown by output length."""
+    # Lengths: 10, 25, 50, 100, 200
+    # Returns (throughput, duration)
+    mock_throughput.side_effect = [
+        (10.0, 0.1),
+        (10.0, 0.25),
+        (10.0, 0.5),
+        (10.0, 1.0),
+        (10.0, 2.0)
+    ]
+    
+    model = MagicMock()
+    tokenizer = MagicMock()
+    
+    results = measure_output_length_impact(model, tokenizer)
+    
+    assert results[10] == 0.1
+    assert results[25] == 0.25
+    assert results[50] == 0.5
+    assert results[100] == 1.0
+    assert results[200] == 2.0
+    assert len(results) == 5

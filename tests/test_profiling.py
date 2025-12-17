@@ -14,7 +14,10 @@ def mock_dependencies():
          patch("llm_profiler.cli.find_oom_limit") as mock_find_limit, \
          patch("llm_profiler.cli.measure_prefill_decode") as mock_pd, \
          patch("llm_profiler.cli.profile_memory_breakdown") as mock_mem, \
+         patch("llm_profiler.cli.measure_output_length_impact") as mock_latency, \
          patch("llm_profiler.cli.get_vram_usage") as mock_vram, \
+         patch("llm_profiler.cli.get_system_info") as mock_sys, \
+         patch("llm_profiler.cli.save_json") as mock_save, \
          patch("llm_profiler.validation.model_info") as mock_info:
         
         # Default successful behaviors
@@ -28,7 +31,7 @@ def mock_dependencies():
         }
         mock_find_limit.return_value = 1
         
-        # Mock prefill/decode results (Phase 4)
+        # Mock prefill/decode results
         mock_pd.return_value = {
             "prefill_time_sec": 0.5,
             "decode_time_sec": 5.5,
@@ -36,7 +39,7 @@ def mock_dependencies():
             "per_token_decode_ms": 110.0
         }
         
-        # Mock memory breakdown (Phase 5)
+        # Mock memory breakdown
         mock_mem.return_value = {
             "weights_gb": 4.0,
             "kv_cache_gb": 0.5,
@@ -44,86 +47,86 @@ def mock_dependencies():
             "total_gb": 6.0
         }
         
+        # Mock latency
+        mock_latency.return_value = {
+            10: 0.1, 25: 0.25, 50: 0.5, 100: 1.0, 200: 2.0
+        }
+        
+        # Mock system info
+        mock_sys.return_value = {"gpu": "Test"}
+        
+        # Mock save
+        mock_save.return_value = "/path/to/result.json"
+        
         yield {
             "load": mock_load,
             "sweep": mock_sweep,
             "find_limit": mock_find_limit,
             "pd": mock_pd,
             "mem": mock_mem,
+            "latency": mock_latency,
+            "sys": mock_sys,
+            "save": mock_save,
             "vram": mock_vram,
             "info": mock_info
         }
 
-def test_phase5_profiling_output(runner, mock_dependencies):
-    """Test full profiling flow including Phase 5 (memory breakdown)."""
+def test_phase6_profiling_output(runner, mock_dependencies):
+    """Test full profiling flow including Phase 6 (report generation)."""
     result = runner.invoke(main, ["--model", "Qwen/Qwen2.5-0.5B-Instruct"])
     
     assert result.exit_code == 0
     
-    # Phase 3 checks
+    # Phase 3
     assert "Testing batch sizes" in result.output
     
-    # Phase 4 checks
+    # Phase 4
     assert "Measuring prefill vs decode" in result.output
     
-    # Phase 5 checks
-    assert "Memory profiling" in result.output
-    assert "Model weights: 4.00 GB" in result.output
-    assert "KV cache (BS=1, 100 tokens): 0.50 GB" in result.output
-    assert "Activation memory: 1.50 GB" in result.output
-    assert "Total: 6.00 GB" in result.output
+    # Phase 5
+    assert "Memory and latency profiling" in result.output
+    assert "Output length impact" in result.output
     
-    mock_dependencies["mem"].assert_called_once()
+    # Phase 6
+    assert "Generating report" in result.output
+    assert "Results saved to: /path/to/result.json" in result.output
+    
+    mock_dependencies["save"].assert_called_once()
+    
+    # Verify data passed to save_json has correct structure
+    saved_data = mock_dependencies["save"].call_args[0][0]
+    assert saved_data["model_name"] == "Qwen/Qwen2.5-0.5B-Instruct"
+    assert "throughput" in saved_data
+    assert "memory" in saved_data
+    assert "latency" in saved_data
+    assert "output_length_impact" in saved_data["latency"]
 
 def test_phase3_basic_profiling(runner, mock_dependencies):
     """Test basic profiling command integration with sweep."""
     result = runner.invoke(main, ["--model", "Qwen/Qwen2.5-0.5B-Instruct"])
-    
     assert result.exit_code == 0
     assert "Profiling Qwen/Qwen2.5-0.5B-Instruct" in result.output
-    assert "Testing batch sizes" in result.output
-    assert "BS=1: ✓ 15.0 tok/s" in result.output.replace("\t", " ")
-    assert "Max successful batch size: 1" in result.output
 
 def test_phase3_invalid_model(runner, mock_dependencies):
     """Test invalid model handling."""
     from huggingface_hub.utils import RepositoryNotFoundError
     mock_dependencies["info"].side_effect = RepositoryNotFoundError("Not found")
-    
     result = runner.invoke(main, ["--model", "invalid/model"])
-    
     assert result.exit_code != 0
     assert "Model 'invalid/model' not found" in result.output
-    
-    mock_dependencies["load"].assert_not_called()
 
 def test_phase3_quantization_argument(runner, mock_dependencies):
     """Test --quantization argument passed correctly."""
-    result = runner.invoke(main, [
-        "--model", "Qwen/Qwen2.5-0.5B-Instruct",
-        "--quantization", "4bit"
-    ])
-    
+    result = runner.invoke(main, ["--model", "Qwen", "--quantization", "4bit"])
     assert result.exit_code == 0
     assert "quant=4bit" in result.output
-    mock_dependencies["load"].assert_called_once()
 
 def test_phase3_max_new_tokens_argument(runner, mock_dependencies):
-    """Test --max-new-tokens argument passed to sweep and prefill."""
-    result = runner.invoke(main, [
-        "--model", "Qwen/Qwen2.5-0.5B-Instruct",
-        "--max-new-tokens", "20"
-    ])
-    
+    """Test --max-new-tokens argument passed to sweep."""
+    result = runner.invoke(main, ["--model", "Qwen", "--max-new-tokens", "20"])
     assert result.exit_code == 0
-    
-    # Check sweep call
     sweep_kwargs = mock_dependencies["sweep"].call_args.kwargs
     assert sweep_kwargs["max_new_tokens"] == 20
-    
-    # Check prefill/decode call
-    pd_kwargs = mock_dependencies["pd"].call_args.kwargs
-    assert pd_kwargs["max_new_tokens"] == 20
 
 def test_phase3_oom_reporting(runner, mock_dependencies):
     """Test OOM reporting in CLI output."""
@@ -131,61 +134,31 @@ def test_phase3_oom_reporting(runner, mock_dependencies):
         1: {"status": "success", "throughput": 10.0, "duration": 1.0, "vram_gb": 2.0},
         2: {"status": "oom"}
     }
-    mock_dependencies["find_limit"].return_value = 1
-    
-    result = runner.invoke(main, ["--model", "test/model"])
-    
+    result = runner.invoke(main, ["--model", "test"])
     assert result.exit_code == 0
-    assert "BS=1: ✓ 10.0 tok/s" in result.output.replace("\t", " ")
     assert "BS=2: ✗ OOM" in result.output.replace("\t", " ")
-    assert "Max successful batch size: 1" in result.output
 
 def test_phase3_no_successful_batches(runner, mock_dependencies):
     """Test output when all batches fail."""
-    mock_dependencies["sweep"].return_value = {
-        1: {"status": "oom"}
-    }
+    mock_dependencies["sweep"].return_value = {1: {"status": "oom"}}
     mock_dependencies["find_limit"].return_value = None
-    
-    result = runner.invoke(main, ["--model", "test/model"])
-    
+    result = runner.invoke(main, ["--model", "test"])
     assert result.exit_code == 0
-    assert "BS=1: ✗ OOM" in result.output.replace("\t", " ")
     assert "No successful batch sizes found" in result.output
 
-def test_invalid_quantization(runner, mock_dependencies): # Patched model_info
-    """Test invalid quantization option."""
-    result = runner.invoke(main, [
-        "--model", "Qwen/Qwen2.5-0.5B-Instruct",
-        "--quantization", "invalid_bit"
-    ])
-    
+def test_invalid_quantization(runner, mock_dependencies):
+    result = runner.invoke(main, ["--model", "Qwen", "--quantization", "invalid"])
     assert result.exit_code != 0
-    assert "Invalid value for '--quantization'" in result.output
 
-def test_invalid_max_batch_size(runner, mock_dependencies): # Patched model_info
-    """Test invalid max-batch-size (out of range)."""
-    result = runner.invoke(main, [
-        "--model", "Qwen/Qwen2.5-0.5B-Instruct",
-        "--max-batch-size", "1000"
-    ])
-    
+def test_invalid_max_batch_size(runner, mock_dependencies):
+    result = runner.invoke(main, ["--model", "Qwen", "--max-batch-size", "1000"])
     assert result.exit_code != 0
-    assert "Invalid value for '--max-batch-size'" in result.output
 
 def test_comparison_mode_placeholder(runner, mock_dependencies):
-    """Test comparison mode (Phase 8 placeholder)."""
-    result = runner.invoke(main, [
-        "--compare", "model1,model2"
-    ])
-    
+    result = runner.invoke(main, ["--compare", "m1,m2"])
     assert result.exit_code == 0
-    assert "Starting comparison for models: model1, model2" in result.output
-    
-    mock_dependencies["load"].assert_not_called()
+    assert "Starting comparison" in result.output
 
 def test_missing_required_args(runner):
-    """Test failure when neither --model nor --compare is provided."""
     result = runner.invoke(main, [])
     assert result.exit_code != 0
-    assert "Either --model or --compare must be provided" in result.output

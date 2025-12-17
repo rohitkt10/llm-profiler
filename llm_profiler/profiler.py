@@ -321,3 +321,20 @@ def profile_memory_breakdown(model, tokenizer, batch_size=1, seq_len=100):
         "activations_gb": activations_mem,
         "total_gb": peak_mem
     }
+
+def measure_output_length_impact(model, tokenizer):
+    """
+    Measures total time for generating 10, 25, 50, 100, 200 tokens at batch size 1.
+    """
+    lengths = [10, 25, 50, 100, 200]
+    results = {}
+    
+    for length in lengths:
+        try:
+            # We use batch_size=1
+            _, duration = measure_throughput(model, tokenizer, batch_size=1, max_new_tokens=length)
+            results[length] = duration
+        except Exception:
+            results[length] = None # Indicate failure
+            
+    return results
