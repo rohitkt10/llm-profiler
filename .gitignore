@@ -37,7 +37,8 @@ profiles/
 .llm_profiler/
 PRD.md
 AGENTS.md
-CHANGELOG.md
+TODO.md
+CHANGELOG_INTERNAL.md
 .gemini/
 
 # IDEs
