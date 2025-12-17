@@ -20,6 +20,8 @@ def mock_dependencies():
          patch("llm_profiler.cli.save_json") as mock_save, \
          patch("llm_profiler.cli.plot_throughput") as mock_plot_tp, \
          patch("llm_profiler.cli.plot_memory_breakdown") as mock_plot_mem, \
+         patch("llm_profiler.cli.save_comparison_json") as mock_save_comp, \
+         patch("llm_profiler.cli.plot_comparison_throughput") as mock_plot_comp, \
          patch("llm_profiler.validation.model_info") as mock_info:
         
         # Default successful behaviors
@@ -62,6 +64,9 @@ def mock_dependencies():
         mock_plot_tp.return_value = "/path/to/tp.png"
         mock_plot_mem.return_value = "/path/to/mem.png"
         
+        mock_save_comp.return_value = "/path/to/comparison.json"
+        mock_plot_comp.return_value = "/path/to/comparison_plot.png"
+        
         yield {
             "load": mock_load,
             "sweep": mock_sweep,
@@ -73,6 +78,8 @@ def mock_dependencies():
             "save": mock_save,
             "plot_tp": mock_plot_tp,
             "plot_mem": mock_plot_mem,
+            "save_comp": mock_save_comp,
+            "plot_comp": mock_plot_comp,
             "vram": mock_vram,
             "info": mock_info
         }
@@ -96,6 +103,20 @@ def test_phase6_profiling_output(runner, mock_dependencies):
     assert result.exit_code == 0
     assert "Results saved to: /path/to/result.json" in result.output
     mock_dependencies["save"].assert_called_once()
+
+def test_comparison_mode(runner, mock_dependencies):
+    """Test comparison mode (Phase 8)."""
+    result = runner.invoke(main, ["--compare", "model1,model2"])
+    
+    assert result.exit_code == 0
+    assert "Starting comparison for 2 models" in result.output
+    assert "Comparison JSON saved to" in result.output
+    assert "Comparison plot saved to" in result.output
+    
+    # load_model called twice (once per model)
+    assert mock_dependencies["load"].call_count == 2
+    mock_dependencies["save_comp"].assert_called_once()
+    mock_dependencies["plot_comp"].assert_called_once()
 
 def test_phase3_basic_profiling(runner, mock_dependencies):
     """Test basic profiling command integration with sweep."""
@@ -149,11 +170,6 @@ def test_invalid_quantization(runner, mock_dependencies):
 def test_invalid_max_batch_size(runner, mock_dependencies):
     result = runner.invoke(main, ["--model", "Qwen", "--max-batch-size", "1000"])
     assert result.exit_code != 0
-
-def test_comparison_mode_placeholder(runner, mock_dependencies):
-    result = runner.invoke(main, ["--compare", "m1,m2"])
-    assert result.exit_code == 0
-    assert "Starting comparison" in result.output
 
 def test_missing_required_args(runner):
     result = runner.invoke(main, [])

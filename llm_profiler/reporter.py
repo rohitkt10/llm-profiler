@@ -162,3 +162,64 @@ def plot_memory_breakdown(sweep_results, output_dir, model_name, quantization, m
     plt.close()
     
     return str(filepath)
+
+def save_comparison_json(comparison_data, output_dir):
+    """Saves comparison results to JSON."""
+    profiles_dir = Path(output_dir) / "profiles"
+    profiles_dir.mkdir(parents=True, exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"comparison-{timestamp}.json"
+    filepath = profiles_dir / filename
+    
+    if "timestamp" not in comparison_data:
+        comparison_data["timestamp"] = datetime.now().isoformat()
+    
+    with open(filepath, "w") as f:
+        json.dump(comparison_data, f, indent=2)
+        
+    return str(filepath)
+
+def plot_comparison_throughput(comparison_data, output_dir):
+    """Generates a comparison plot for throughput vs batch size."""
+    plots_dir = Path(output_dir) / "plots"
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"comparison-{timestamp}-throughput.png"
+    filepath = plots_dir / filename
+    
+    plt.figure(figsize=(12, 8))
+    
+    if "details" not in comparison_data:
+        return None
+        
+    for model_data in comparison_data["details"]:
+        name = model_data["model_name"]
+        throughput_data = model_data.get("throughput", {})
+        
+        batches = []
+        throughputs = []
+        for key, val in throughput_data.items():
+            if key.startswith("batch_"):
+                bs = int(key.split("_")[1])
+                tp = val["tokens_per_sec"]
+                batches.append(bs)
+                throughputs.append(tp)
+        
+        if batches:
+            zipped = sorted(zip(batches, throughputs))
+            batches, throughputs = zip(*zipped)
+            plt.plot(batches, throughputs, marker='o', label=name)
+            
+    plt.xscale('log', base=2)
+    plt.xlabel('Batch Size')
+    plt.ylabel('Throughput (tokens/sec)')
+    plt.title('Model Comparison: Throughput')
+    plt.grid(True, which="both", ls="-", alpha=0.2)
+    plt.legend()
+    
+    plt.savefig(filepath, dpi=300)
+    plt.close()
+    
+    return str(filepath)

@@ -2,7 +2,7 @@ import pytest
 import json
 import os
 from unittest.mock import patch, MagicMock
-from llm_profiler.reporter import save_json, get_system_info, plot_throughput, plot_memory_breakdown
+from llm_profiler.reporter import save_json, get_system_info, plot_throughput, plot_memory_breakdown, save_comparison_json, plot_comparison_throughput
 
 def test_get_system_info():
     with patch("torch.cuda.is_available", return_value=True), \
@@ -33,6 +33,17 @@ def test_save_json(tmp_path):
         loaded = json.load(f)
         assert loaded["model_name"] == "test/model"
         assert "timestamp" in loaded
+
+def test_save_comparison_json(tmp_path):
+    data = {"models": ["m1", "m2"]}
+    output_dir = tmp_path
+    filepath = save_comparison_json(data, str(output_dir))
+    
+    assert os.path.exists(filepath)
+    assert "comparison-" in filepath
+    with open(filepath, "r") as f:
+        loaded = json.load(f)
+        assert loaded["models"] == ["m1", "m2"]
 
 @patch("matplotlib.pyplot.savefig")
 @patch("matplotlib.pyplot.close")
@@ -69,3 +80,30 @@ def test_plot_memory_breakdown(mock_calc, mock_close, mock_save, tmp_path):
     mock_save.assert_called_once()
     mock_close.assert_called_once()
     assert mock_calc.call_count == 2 # Called for BS 1 and 2
+
+@patch("matplotlib.pyplot.savefig")
+@patch("matplotlib.pyplot.close")
+def test_plot_comparison_throughput(mock_close, mock_save, tmp_path):
+    data = {
+        "details": [
+            {
+                "model_name": "m1",
+                "throughput": {
+                    "batch_1": {"tokens_per_sec": 10.0},
+                    "batch_2": {"tokens_per_sec": 20.0}
+                }
+            },
+            {
+                "model_name": "m2",
+                "throughput": {
+                    "batch_1": {"tokens_per_sec": 15.0},
+                    "batch_2": {"tokens_per_sec": 25.0}
+                }
+            }
+        ]
+    }
+    
+    filepath = plot_comparison_throughput(data, str(tmp_path))
+    assert "comparison-" in filepath
+    assert "throughput.png" in filepath
+    mock_save.assert_called_once()
