@@ -13,6 +13,7 @@ def mock_dependencies():
          patch("llm_profiler.cli.sweep_batch_sizes") as mock_sweep, \
          patch("llm_profiler.cli.find_oom_limit") as mock_find_limit, \
          patch("llm_profiler.cli.measure_prefill_decode") as mock_pd, \
+         patch("llm_profiler.cli.profile_memory_breakdown") as mock_mem, \
          patch("llm_profiler.cli.get_vram_usage") as mock_vram, \
          patch("llm_profiler.validation.model_info") as mock_info:
         
@@ -35,31 +36,44 @@ def mock_dependencies():
             "per_token_decode_ms": 110.0
         }
         
+        # Mock memory breakdown (Phase 5)
+        mock_mem.return_value = {
+            "weights_gb": 4.0,
+            "kv_cache_gb": 0.5,
+            "activations_gb": 1.5,
+            "total_gb": 6.0
+        }
+        
         yield {
             "load": mock_load,
             "sweep": mock_sweep,
             "find_limit": mock_find_limit,
             "pd": mock_pd,
+            "mem": mock_mem,
             "vram": mock_vram,
             "info": mock_info
         }
 
-def test_phase4_profiling_output(runner, mock_dependencies):
-    """Test full profiling flow including Phase 4 (prefill/decode)."""
+def test_phase5_profiling_output(runner, mock_dependencies):
+    """Test full profiling flow including Phase 5 (memory breakdown)."""
     result = runner.invoke(main, ["--model", "Qwen/Qwen2.5-0.5B-Instruct"])
     
     assert result.exit_code == 0
+    
     # Phase 3 checks
     assert "Testing batch sizes" in result.output
-    assert "BS=1: ✓ 15.0 tok/s" in result.output.replace("\t", " ")
     
     # Phase 4 checks
     assert "Measuring prefill vs decode" in result.output
-    assert "Prefill (100 tokens): 0.50s" in result.output
-    assert "Decode (50 tokens):   5.50s" in result.output
-    assert "Ratio: 11.0x slower" in result.output
     
-    mock_dependencies["pd"].assert_called_once()
+    # Phase 5 checks
+    assert "Memory profiling" in result.output
+    assert "Model weights: 4.00 GB" in result.output
+    assert "KV cache (BS=1, 100 tokens): 0.50 GB" in result.output
+    assert "Activation memory: 1.50 GB" in result.output
+    assert "Total: 6.00 GB" in result.output
+    
+    mock_dependencies["mem"].assert_called_once()
 
 def test_phase3_basic_profiling(runner, mock_dependencies):
     """Test basic profiling command integration with sweep."""

@@ -1,7 +1,7 @@
 import pytest
 import torch
 from unittest.mock import MagicMock, patch
-from llm_profiler.profiler import sweep_batch_sizes, find_oom_limit, measure_prefill_decode
+from llm_profiler.profiler import sweep_batch_sizes, find_oom_limit, measure_prefill_decode, calculate_kv_cache_size, profile_memory_breakdown
 
 @patch("llm_profiler.profiler.measure_throughput")
 @patch("llm_profiler.profiler.get_vram_usage")
@@ -106,7 +106,7 @@ def test_measure_prefill_decode(mock_time):
     ]
     
     model = MagicMock()
-    model.device = "cpu" # Fix: Set a valid device
+    model.device = "cpu" 
     tokenizer = MagicMock()
     # Mock encoding
     tokenizer.return_value.input_ids = torch.zeros((1, 200)) # Enough tokens
@@ -117,3 +117,68 @@ def test_measure_prefill_decode(mock_time):
     assert stats["decode_time_sec"] == 5.5
     assert stats["ratio"] == 11.0 # 5.5 / 0.5
     assert stats["per_token_decode_ms"] == (5.5 / 50) * 1000
+
+# --- Phase 5 Tests ---
+
+def test_calculate_kv_cache_size():
+    """Test analytical KV cache calculation."""
+    model = MagicMock()
+    # Config: 32 layers, 4096 hidden, 32 heads, fp16 (2 bytes)
+    model.config.num_hidden_layers = 32
+    model.config.hidden_size = 4096
+    model.config.num_attention_heads = 32
+    # Set explicitly to avoid MagicMock auto-creation
+    model.config.num_key_value_heads = 32
+    
+    model.dtype = torch.float16
+    
+    batch_size = 1
+    seq_len = 100
+    
+    gb = calculate_kv_cache_size(model, batch_size, seq_len)
+    
+    expected_bytes = 2 * 1 * 100 * 32 * 32 * 128 * 2
+    expected_gb = expected_bytes / 1024**3
+    
+    assert gb == expected_gb
+
+@patch("torch.cuda.max_memory_allocated")
+@patch("torch.cuda.memory_allocated")
+@patch("torch.cuda.empty_cache")
+@patch("torch.cuda.reset_peak_memory_stats")
+@patch("llm_profiler.profiler.calculate_kv_cache_size")
+def test_profile_memory_breakdown(mock_calc, mock_reset, mock_empty, mock_alloc, mock_max_alloc):
+    """Test memory profiling logic."""
+    model = MagicMock()
+    # Mock device object
+    model.device = torch.device("cuda")
+    
+    tokenizer = MagicMock()
+    tokenizer.return_value.input_ids = torch.zeros((1, 200))
+    
+    # Setup mocks
+    # weights_mem = 4.0 GB
+    # peak_mem = 6.0 GB
+    # kv_cache = 0.5 GB
+    # activations = 6.0 - 4.0 - 0.5 = 1.5 GB
+    
+    mock_alloc.return_value = 4.0 * 1024**3
+    mock_max_alloc.return_value = 6.0 * 1024**3
+    mock_calc.return_value = 0.5
+    
+    stats = profile_memory_breakdown(model, tokenizer)
+    
+    assert stats["weights_gb"] == 4.0
+    assert stats["total_gb"] == 6.0
+    assert stats["kv_cache_gb"] == 0.5
+    assert stats["activations_gb"] == 1.5
+
+def test_profile_memory_breakdown_cpu():
+    """Test memory profiling returns 0s on CPU."""
+    model = MagicMock()
+    model.device.type = "cpu"
+    
+    stats = profile_memory_breakdown(model, MagicMock())
+    
+    assert stats["weights_gb"] == 0.0
+    assert stats["total_gb"] == 0.0

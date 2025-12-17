@@ -3,7 +3,7 @@ import os
 import torch
 from pathlib import Path
 from rich.console import Console
-from llm_profiler.profiler import load_model, measure_throughput, get_vram_usage, sweep_batch_sizes, find_oom_limit, measure_prefill_decode
+from llm_profiler.profiler import load_model, measure_throughput, get_vram_usage, sweep_batch_sizes, find_oom_limit, measure_prefill_decode, profile_memory_breakdown
 from llm_profiler.validation import validate_model_exists, validate_compare_models
 from llm_profiler.utils import create_quantization_config
 
@@ -79,6 +79,17 @@ def main(model, quantization, max_batch_size, max_new_tokens, device, output, ca
         console.print(f"  Ratio: {pd_stats['ratio']:.1f}x slower")
     except Exception as e:
         console.print(f"⚠️  Warning: Failed to measure prefill/decode: {e}", style="yellow")
+
+    # Memory Breakdown (Phase 5)
+    console.print("[4/5] Memory profiling...", style="bold blue")
+    try:
+        mem_stats = profile_memory_breakdown(model_obj, tokenizer, batch_size=1, seq_len=100)
+        console.print(f"  Model weights: {mem_stats['weights_gb']:.2f} GB")
+        console.print(f"  KV cache (BS=1, 100 tokens): {mem_stats['kv_cache_gb']:.2f} GB")
+        console.print(f"  Activation memory: {mem_stats['activations_gb']:.2f} GB")
+        console.print(f"  Total: {mem_stats['total_gb']:.2f} GB")
+    except Exception as e:
+        console.print(f"⚠️  Warning: Failed to measure memory breakdown: {e}", style="yellow")
 
 if __name__ == "__main__":
     main()
