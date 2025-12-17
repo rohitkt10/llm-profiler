@@ -122,11 +122,11 @@ A full HTML report generated for `Qwen/Qwen2.5-1.5B-Instruct` provides a compreh
 
 **Throughput vs Batch Size**
 
-![Throughput Plot](plots/Qwen-Qwen2.5-1.5B-Instruct-none-throughput.png)
+![Throughput Plot](assets/Qwen-Qwen2.5-1.5B-Instruct-none-throughput.png)
 
 **Memory Breakdown**
 
-![Memory Plot](plots/Qwen-Qwen2.5-1.5B-Instruct-none-memory.png)
+![Memory Plot](assets/Qwen-Qwen2.5-1.5B-Instruct-none-memory.png)
 
 #### Metrics Summary
 

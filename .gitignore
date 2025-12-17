@@ -30,6 +30,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+plots/
+profiles/
 
 # Project Specific
 .llm_profiler/
