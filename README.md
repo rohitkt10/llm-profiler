@@ -1,5 +1,7 @@
 # LLM Inference Profiler
 
+[![CI](https://github.com/rohitkt10/llm-profiler/actions/workflows/ci.yml/badge.svg)](https://github.com/rohitkt10/llm-profiler/actions/workflows/ci.yml)
+
 A professional command-line tool that automatically benchmarks and profiles the inference performance of any HuggingFace language model.
 
 ## Features
