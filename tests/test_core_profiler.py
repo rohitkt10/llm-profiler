@@ -173,7 +173,8 @@ def test_profile_memory_breakdown(
     """Test memory profiling logic."""
     model = MagicMock()
     # Mock device object
-    model.device = torch.device("cuda")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.device = torch.device(device)
 
     tokenizer = MagicMock()
     tokenizer.return_value.input_ids = torch.zeros((1, 200))
