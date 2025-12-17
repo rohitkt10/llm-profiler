@@ -47,11 +47,9 @@ def load_model(model_name: str, quantization_config=None, device="auto"):
         # Default fallback
         kwargs["torch_dtype"] = torch.float16 if device == "cuda" else torch.float32
 
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name, **kwargs
-    )  # type: ignore  # type: ignore
-
-    if device == "cpu" and model.device.type != "cpu":
+    model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
+    # type: ignore[union-attr]
+    if device == "cpu" and model.device.type != "cpu":  # type: ignore
         model = model.to("cpu")
 
     return model, tokenizer

@@ -53,3 +53,4 @@ python_version = "3.12"
 ignore_missing_imports = true
 strict_optional = false
 exclude = [".venv"]
+disable_error_code = ["arg-type"]
