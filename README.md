@@ -17,12 +17,6 @@ A professional command-line tool that automatically benchmarks and profiles the 
 ## Installation
 
 ```bash
-pip install llm-profiler
-```
-
-Or for development:
-
-```bash
 git clone https://github.com/rohitkt10/llm-profiler.git
 cd llm-profiler
 pip install -e .
