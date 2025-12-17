@@ -10,7 +10,9 @@ A professional command-line tool that automatically benchmarks and profiles the 
 - **Memory & Latency Breakdown**: Analyzes VRAM usage and generation latency vs output length.
 - **Quantization Support**: Easy testing of 4-bit, 8-bit, fp16, and bf16 precision.
 - **JSON & Visualization**: Generates structured JSON reports and visualization plots (throughput/memory).
+- **HTML/Markdown Reports**: Creates rich, shareable reports.
 - **Model Comparison**: Compare performance of multiple models side-by-side.
+- **Robustness**: Auto-detects CPU/CUDA, manages disk space/cache, and handles errors gracefully.
 
 ## Installation
 
@@ -68,6 +70,14 @@ llm-profile --model "Qwen/Qwen2.5-0.5B-Instruct" --max-batch-size 4 --max-new-to
 ✓ Plot saved to: ~/.llm_profiler/plots/Qwen-Qwen2.5-0.5B-Instruct-none-memory.png
 ```
 
+### Report Generation
+
+Generate HTML or Markdown reports (plots are automatically embedded/linked):
+
+```bash
+llm-profile --model "Qwen/Qwen2.5-0.5B-Instruct" --output html
+```
+
 ### Model Comparison
 
 Compare multiple models sequentially (results aggregated):
@@ -85,11 +95,6 @@ llm-profile --compare "Qwen/Qwen2.5-0.5B-Instruct,Qwen/Qwen2.5-1.5B-Instruct" --
   Configuration: quant=4bit, device=auto, max_bs=4
 [1/5] Loading model...
 ✓ Model loaded: 0.4 GB VRAM
-[2/5] Testing batch sizes (up to 4)...
-  BS=1: ✓ 43.8 tok/s (0.5s)
-  BS=2: ✓ 69.2 tok/s (0.6s)
-  BS=4: ✓ 150.7 tok/s (0.5s)
-✓ Max successful batch size: 4
 ...
 [5/5] Generating report...
 ✓ Results saved to: ~/.llm_profiler/profiles/Qwen-Qwen2.5-0.5B-Instruct-4bit-20251217-105941.json
@@ -99,11 +104,6 @@ llm-profile --compare "Qwen/Qwen2.5-0.5B-Instruct,Qwen/Qwen2.5-1.5B-Instruct" --
   Configuration: quant=4bit, device=auto, max_bs=4
 [1/5] Loading model...
 ✓ Model loaded: 1.1 GB VRAM
-[2/5] Testing batch sizes (up to 4)...
-  BS=1: ✓ 36.1 tok/s (0.6s)
-  BS=2: ✓ 58.1 tok/s (0.7s)
-  BS=4: ✓ 111.2 tok/s (0.7s)
-✓ Max successful batch size: 4
 ...
 [5/5] Generating report...
 ✓ Results saved to: ~/.llm_profiler/profiles/Qwen-Qwen2.5-1.5B-Instruct-4bit-20251217-110002.json

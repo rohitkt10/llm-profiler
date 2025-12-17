@@ -6,14 +6,23 @@ from pathlib import Path
 from rich.console import Console
 from llm_profiler.profiler import load_model, measure_throughput, get_vram_usage, sweep_batch_sizes, find_oom_limit, measure_prefill_decode, profile_memory_breakdown, measure_output_length_impact
 from llm_profiler.validation import validate_model_exists, validate_compare_models
-from llm_profiler.utils import create_quantization_config
-from llm_profiler.reporter import get_system_info, save_json, plot_throughput, plot_memory_breakdown, save_comparison_json, plot_comparison_throughput
+from llm_profiler.utils import create_quantization_config, check_disk_space, manage_cache_size
+from llm_profiler.reporter import get_system_info, save_json, plot_throughput, plot_memory_breakdown, save_comparison_json, plot_comparison_throughput, generate_html, generate_markdown
 
 console = Console()
 
 def profile_single_model(model, quantization, max_batch_size, max_new_tokens, device, output, cache_dir):
     """Profiles a single model and returns the results dictionary."""
     console.print(f"🔍 Profiling {model}...")
+    
+    # CPU Check (Phase 10)
+    if device == "cpu" or (device == "auto" and not torch.cuda.is_available()):
+        if max_batch_size > 4:
+            console.print("⚠️  Running on CPU. Reducing max batch size to 4 to prevent hanging.", style="yellow")
+            max_batch_size = 4
+        if device == "auto":
+            device = "cpu"
+            
     console.print(f"  Configuration: quant={quantization}, device={device}, max_bs={max_batch_size}")
 
     profiling_data = {
@@ -35,6 +44,8 @@ def profile_single_model(model, quantization, max_batch_size, max_new_tokens, de
         console.print(f"✓ Model loaded: {vram:.1f} GB VRAM", style="green")
     except Exception as e:
         console.print(f"❌ Error loading model: {e}", style="red")
+        if "gated" in str(e).lower() or "token" in str(e).lower():
+             console.print("ℹ️  This might be a gated model. Ensure HF_TOKEN is set.", style="yellow")
         return None
 
     # 2. Sweep batch sizes
@@ -119,15 +130,25 @@ def profile_single_model(model, quantization, max_batch_size, max_new_tokens, de
     # 5. Report Generation
     console.print("[5/5] Generating report...", style="bold blue")
     try:
-        saved_json = save_json(profiling_data, cache_dir)
-        console.print(f"✓ Results saved to: {saved_json}", style="bold green")
-        
+        # Generate Plots first (needed for HTML/MD)
         plot_tp = plot_throughput(results, cache_dir, model, quantization)
         console.print(f"✓ Plot saved to: {plot_tp}", style="bold green")
         
         plot_mem = plot_memory_breakdown(results, cache_dir, model, quantization, model_obj, tokenizer, max_new_tokens, weights_gb)
         if plot_mem:
             console.print(f"✓ Plot saved to: {plot_mem}", style="bold green")
+            
+        plots = {'throughput': plot_tp, 'memory': plot_mem}
+        
+        if output == "json":
+            saved_path = save_json(profiling_data, cache_dir)
+            console.print(f"✓ JSON report saved to: {saved_path}", style="bold green")
+        elif output == "html":
+            saved_path = generate_html(profiling_data, cache_dir, plots)
+            console.print(f"✓ HTML report saved to: {saved_path}", style="bold green")
+        elif output == "markdown":
+            saved_path = generate_markdown(profiling_data, cache_dir, plots)
+            console.print(f"✓ Markdown report saved to: {saved_path}", style="bold green")
             
     except Exception as e:
         console.print(f"❌ Error generating report: {e}", style="red")
@@ -161,6 +182,11 @@ def main(model, quantization, max_batch_size, max_new_tokens, device, output, ca
         ctx.fail("Either --model or --compare must be provided.")
 
     os.makedirs(cache_dir, exist_ok=True)
+    
+    # Phase 10: Disk Space Check
+    has_space, free_gb = check_disk_space(cache_dir, min_gb=0.1)
+    if not has_space:
+        console.print(f"⚠️  Warning: Low disk space in {cache_dir} ({free_gb:.2f} GB).", style="yellow")
 
     if compare:
         console.print(f"🔍 Starting comparison for {len(compare)} models: {', '.join(compare)}")
@@ -210,11 +236,13 @@ def main(model, quantization, max_batch_size, max_new_tokens, device, output, ca
                     console.print(f"✓ Comparison plot saved to: {plot_path}", style="bold green")
             except Exception as e:
                 console.print(f"❌ Error saving comparison report: {e}", style="red")
+    
+    else:
+        # Single model mode
+        profile_single_model(model, quantization, max_batch_size, max_new_tokens, device, output, cache_dir)
         
-        return
-
-    # Single model mode
-    profile_single_model(model, quantization, max_batch_size, max_new_tokens, device, output, cache_dir)
+    # Phase 10: Cache Cleanup
+    manage_cache_size(cache_dir, max_files=100)
 
 if __name__ == "__main__":
     main()

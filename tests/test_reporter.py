@@ -1,8 +1,9 @@
 import pytest
 import json
 import os
+from pathlib import Path
 from unittest.mock import patch, MagicMock
-from llm_profiler.reporter import save_json, get_system_info, plot_throughput, plot_memory_breakdown, save_comparison_json, plot_comparison_throughput
+from llm_profiler.reporter import save_json, get_system_info, plot_throughput, plot_memory_breakdown, save_comparison_json, plot_comparison_throughput, generate_html, generate_markdown
 
 def test_get_system_info():
     with patch("torch.cuda.is_available", return_value=True), \
@@ -107,3 +108,49 @@ def test_plot_comparison_throughput(mock_close, mock_save, tmp_path):
     assert "comparison-" in filepath
     assert "throughput.png" in filepath
     mock_save.assert_called_once()
+
+def test_generate_html(tmp_path):
+    data = {"model_name": "test/model", "quantization": "none", "device": "cuda"}
+    output_dir = tmp_path
+    
+    # Create dummy plot files
+    plot_path = tmp_path / "plot.png"
+    plot_path.write_bytes(b"fake image data")
+    plots = {"throughput": str(plot_path)}
+    
+    filepath = generate_html(data, str(output_dir), plots)
+    
+    assert os.path.exists(filepath)
+    assert filepath.endswith(".html")
+    
+    content = Path(filepath).read_text()
+    assert "<html>" in content
+    assert "test/model" in content
+    # Check base64 embedding
+    assert "data:image/png;base64," in content
+
+def test_generate_markdown(tmp_path):
+    data = {"model_name": "test/model", "quantization": "none", "device": "cuda"}
+    output_dir = tmp_path
+    
+    # Create dummy plot files
+    profiles_dir = tmp_path / "profiles"
+    profiles_dir.mkdir()
+    plots_dir = tmp_path / "plots"
+    plots_dir.mkdir()
+    
+    plot_path = plots_dir / "plot.png"
+    plot_path.write_bytes(b"fake")
+    plots = {"throughput": str(plot_path)}
+    
+    # generate_markdown saves to profiles/
+    # plots are in plots/
+    filepath = generate_markdown(data, str(tmp_path), plots)
+    
+    assert os.path.exists(filepath)
+    assert filepath.endswith(".md")
+    
+    content = Path(filepath).read_text()
+    assert "# LLM Inference Profile: test/model" in content
+    # Check relative link: ../plots/plot.png
+    assert "](../plots/plot.png)" in content or "plots/plot.png" in content

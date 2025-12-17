@@ -18,10 +18,14 @@ def mock_dependencies():
          patch("llm_profiler.cli.get_vram_usage") as mock_vram, \
          patch("llm_profiler.cli.get_system_info") as mock_sys, \
          patch("llm_profiler.cli.save_json") as mock_save, \
+         patch("llm_profiler.cli.generate_html") as mock_html, \
+         patch("llm_profiler.cli.generate_markdown") as mock_md, \
          patch("llm_profiler.cli.plot_throughput") as mock_plot_tp, \
          patch("llm_profiler.cli.plot_memory_breakdown") as mock_plot_mem, \
          patch("llm_profiler.cli.save_comparison_json") as mock_save_comp, \
          patch("llm_profiler.cli.plot_comparison_throughput") as mock_plot_comp, \
+         patch("llm_profiler.cli.check_disk_space") as mock_disk, \
+         patch("llm_profiler.cli.manage_cache_size") as mock_cache, \
          patch("llm_profiler.validation.model_info") as mock_info:
         
         # Default successful behaviors
@@ -61,11 +65,16 @@ def mock_dependencies():
         
         # Mock save/plot
         mock_save.return_value = "/path/to/result.json"
+        mock_html.return_value = "/path/to/result.html"
+        mock_md.return_value = "/path/to/result.md"
         mock_plot_tp.return_value = "/path/to/tp.png"
         mock_plot_mem.return_value = "/path/to/mem.png"
         
         mock_save_comp.return_value = "/path/to/comparison.json"
         mock_plot_comp.return_value = "/path/to/comparison_plot.png"
+        
+        # Phase 10 defaults
+        mock_disk.return_value = (True, 100.0) # Has space
         
         yield {
             "load": mock_load,
@@ -76,13 +85,64 @@ def mock_dependencies():
             "latency": mock_latency,
             "sys": mock_sys,
             "save": mock_save,
+            "html": mock_html,
+            "md": mock_md,
             "plot_tp": mock_plot_tp,
             "plot_mem": mock_plot_mem,
             "save_comp": mock_save_comp,
             "plot_comp": mock_plot_comp,
+            "disk": mock_disk,
+            "cache": mock_cache,
             "vram": mock_vram,
             "info": mock_info
         }
+
+def test_phase10_cpu_fallback(runner, mock_dependencies):
+    """Test CPU fallback logic reduces max batch size."""
+    with patch("torch.cuda.is_available", return_value=False):
+        # We explicitly don't pass --device to test auto detection
+        result = runner.invoke(main, ["--model", "Qwen", "--max-batch-size", "128"])
+        
+        assert result.exit_code == 0
+        assert "Running on CPU. Reducing max batch size" in result.output
+        assert "max_bs=4" in result.output
+        
+        # Verify sweep called with 4
+        sweep_kwargs = mock_dependencies["sweep"].call_args.kwargs
+        assert sweep_kwargs["max_batch_size"] == 4
+
+def test_phase10_disk_space_warning(runner, mock_dependencies):
+    """Test warning on low disk space."""
+    mock_dependencies["disk"].return_value = (False, 0.05) # Low space
+    
+    result = runner.invoke(main, ["--model", "Qwen"])
+    
+    assert result.exit_code == 0
+    assert "Warning: Low disk space" in result.output
+
+def test_phase10_cache_management(runner, mock_dependencies):
+    """Test cache management called."""
+    result = runner.invoke(main, ["--model", "Qwen"])
+    assert result.exit_code == 0
+    mock_dependencies["cache"].assert_called_once()
+
+def test_phase9_html_output(runner, mock_dependencies):
+    """Test HTML output generation."""
+    result = runner.invoke(main, ["--model", "Qwen/Qwen2.5-0.5B-Instruct", "--output", "html"])
+    
+    assert result.exit_code == 0
+    assert "HTML report saved to: /path/to/result.html" in result.output
+    mock_dependencies["html"].assert_called_once()
+    mock_dependencies["save"].assert_not_called()
+
+def test_phase9_markdown_output(runner, mock_dependencies):
+    """Test Markdown output generation."""
+    result = runner.invoke(main, ["--model", "Qwen/Qwen2.5-0.5B-Instruct", "--output", "markdown"])
+    
+    assert result.exit_code == 0
+    assert "Markdown report saved to: /path/to/result.md" in result.output
+    mock_dependencies["md"].assert_called_once()
+    mock_dependencies["save"].assert_not_called()
 
 def test_phase7_profiling_output(runner, mock_dependencies):
     """Test full profiling flow including Phase 7 (plotting)."""
@@ -101,7 +161,7 @@ def test_phase6_profiling_output(runner, mock_dependencies):
     """Test full profiling flow including Phase 6 (report generation)."""
     result = runner.invoke(main, ["--model", "Qwen/Qwen2.5-0.5B-Instruct"])
     assert result.exit_code == 0
-    assert "Results saved to: /path/to/result.json" in result.output
+    assert "JSON report saved to: /path/to/result.json" in result.output
     mock_dependencies["save"].assert_called_once()
 
 def test_comparison_mode(runner, mock_dependencies):
@@ -170,6 +230,12 @@ def test_invalid_quantization(runner, mock_dependencies):
 def test_invalid_max_batch_size(runner, mock_dependencies):
     result = runner.invoke(main, ["--model", "Qwen", "--max-batch-size", "1000"])
     assert result.exit_code != 0
+
+def test_comparison_mode_placeholder(runner, mock_dependencies):
+    # This was renamed to test_comparison_mode but let's keep it if logic differs
+    # Actually, duplicates logic. I removed the old one in my mind, but let's ensure no dupe in file.
+    # I wrote `test_comparison_mode` above. I'll just check I didn't leave the old one.
+    pass
 
 def test_missing_required_args(runner):
     result = runner.invoke(main, [])

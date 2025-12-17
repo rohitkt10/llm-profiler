@@ -6,6 +6,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import base64
 from datetime import datetime
 from pathlib import Path
 from llm_profiler.profiler import calculate_kv_cache_size
@@ -222,4 +223,116 @@ def plot_comparison_throughput(comparison_data, output_dir):
     plt.savefig(filepath, dpi=300)
     plt.close()
     
+    return str(filepath)
+
+def generate_html(data, output_dir, plots):
+    """Generates an HTML report."""
+    profiles_dir = Path(output_dir) / "profiles"
+    profiles_dir.mkdir(parents=True, exist_ok=True)
+    
+    model_name = data.get("model_name", "unknown").replace("/", "-")
+    quant = data.get("quantization", "none")
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    
+    filename = f"{model_name}-{quant}-{timestamp}.html"
+    filepath = profiles_dir / filename
+    
+    plot_imgs = {}
+    for key, path in plots.items():
+        if path and os.path.exists(path):
+            with open(path, "rb") as f:
+                img_data = f.read()
+                b64 = base64.b64encode(img_data).decode("utf-8")
+                plot_imgs[key] = f"data:image/png;base64,{b64}"
+    
+    html_content = f"""
+    <html>
+    <head>
+        <title>LLM Profile: {data.get('model_name')}</title>
+        <style>
+            body {{ font-family: sans-serif; margin: 20px; }}
+            h1, h2 {{ color: #333; }}
+            table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background-color: #f2f2f2; }}
+            .plot {{ text-align: center; margin: 20px 0; }}
+            img {{ max-width: 100%; height: auto; }}
+        </style>
+    </head>
+    <body>
+        <h1>LLM Inference Profile</h1>
+        <table>
+            <tr><th>Model</th><td>{data.get('model_name')}</td></tr>
+            <tr><th>Quantization</th><td>{data.get('quantization')}</td></tr>
+            <tr><th>Device</th><td>{data.get('device')}</td></tr>
+            <tr><th>Timestamp</th><td>{data.get('timestamp', datetime.now().isoformat())}</td></tr>
+        </table>
+        
+        <h2>Throughput</h2>
+        <div class="plot">
+            <img src="{plot_imgs.get('throughput', '')}" alt="Throughput Plot" />
+        </div>
+        
+        <h2>Memory Breakdown</h2>
+        <div class="plot">
+            <img src="{plot_imgs.get('memory', '')}" alt="Memory Plot" />
+        </div>
+        
+        <h2>Metrics Summary</h2>
+        <pre>{json.dumps(data, indent=2)}</pre>
+    </body>
+    </html>
+    """
+    
+    with open(filepath, "w") as f:
+        f.write(html_content)
+        
+    return str(filepath)
+
+def generate_markdown(data, output_dir, plots):
+    """Generates a Markdown report."""
+    profiles_dir = Path(output_dir) / "profiles"
+    profiles_dir.mkdir(parents=True, exist_ok=True)
+    
+    model_name = data.get("model_name", "unknown").replace("/", "-")
+    quant = data.get("quantization", "none")
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    
+    filename = f"{model_name}-{quant}-{timestamp}.md"
+    filepath = profiles_dir / filename
+    
+    plot_links = {}
+    for key, path in plots.items():
+        if path:
+            try:
+                rel_path = os.path.relpath(path, profiles_dir)
+                plot_links[key] = rel_path
+            except ValueError:
+                plot_links[key] = path
+    
+    md_content = f"""
+# LLM Inference Profile: {data.get('model_name')}
+
+- **Quantization:** {data.get('quantization')}
+- **Device:** {data.get('device')}
+- **Timestamp:** {data.get('timestamp', datetime.now().isoformat())}
+
+## Throughput
+
+![Throughput Plot]({plot_links.get('throughput', '')})
+
+## Memory Breakdown
+
+![Memory Plot]({plot_links.get('memory', '')})
+
+## Detailed Metrics
+
+```json
+{json.dumps(data, indent=2)}
+```
+"""
+    
+    with open(filepath, "w") as f:
+        f.write(md_content)
+        
     return str(filepath)

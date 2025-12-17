@@ -1,4 +1,7 @@
 import torch
+import os
+import shutil
+import psutil
 from transformers import BitsAndBytesConfig
 
 def create_quantization_config(quantization: str):
@@ -49,3 +52,53 @@ def generate_batch_sizes(max_batch_size: int):
         current *= 2
         
     return batch_sizes
+
+def check_disk_space(path, min_gb=0.1):
+    """
+    Checks if available disk space at path is above min_gb.
+    Returns (bool, available_gb).
+    """
+    try:
+        # If path doesn't exist, check parent
+        p = path
+        while p and not os.path.exists(p):
+            parent = os.path.dirname(p)
+            if parent == p: # Root
+                break
+            p = parent
+        
+        if not p or not os.path.exists(p):
+            p = "."
+            
+        total, used, free = shutil.disk_usage(p)
+        free_gb = free / 1024**3
+        return free_gb >= min_gb, free_gb
+    except Exception:
+        return True, 100.0 # Fail open
+
+def manage_cache_size(cache_dir, max_files=100):
+    """
+    Ensures cache directory profiles/ doesn't exceed max_files.
+    Deletes oldest files.
+    """
+    profiles_dir = os.path.join(cache_dir, "profiles")
+    if not os.path.exists(profiles_dir):
+        return
+        
+    try:
+        files = [os.path.join(profiles_dir, f) for f in os.listdir(profiles_dir) if f.endswith(".json")]
+        if len(files) <= max_files:
+            return
+            
+        # Sort by mtime (oldest first)
+        files.sort(key=os.path.getmtime)
+        
+        # Delete oldest
+        to_delete = files[:len(files) - max_files]
+        for f in to_delete:
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+    except Exception:
+        pass
