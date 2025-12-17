@@ -35,6 +35,7 @@ venv.bak/
 .llm_profiler/
 PRD.md
 AGENTS.md
+CHANGELOG.md
 .gemini/
 
 # IDEs
