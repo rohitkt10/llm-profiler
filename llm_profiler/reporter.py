@@ -84,6 +84,10 @@ def plot_throughput(sweep_results, output_dir, model_name, quantization):
     valid_bs = [bs for i, bs in enumerate(batch_sizes) if not ooms[i]]
     valid_tp = [tp for i, tp in enumerate(throughputs) if not ooms[i]]
     
+    if valid_tp:
+        max_tp = max(valid_tp)
+        plt.ylim(0, max_tp * 1.2)
+    
     plt.plot(valid_bs, valid_tp, 'b-o', label='Throughput')
     
     # Plot OOMs
@@ -137,11 +141,19 @@ def plot_memory_breakdown(sweep_results, output_dir, model_name, quantization, m
         weights.append(weights_gb)
         kv_caches.append(kv)
         activations.append(act)
+    
+    # Calculate max total memory for ylim scaling
+    totals = [w + k + a for w, k, a in zip(weights, kv_caches, activations)]
+    max_val = max(totals) if totals else 0
         
     x = np.arange(len(batch_sizes))
     width = 0.5
     
     plt.figure(figsize=(10, 6))
+    
+    # Set Y-axis limit with buffer
+    if max_val > 0:
+        plt.ylim(0, max_val * 1.2)
     
     p1 = plt.bar(x, weights, width, label='Weights', color='lightgray')
     p2 = plt.bar(x, kv_caches, width, bottom=weights, label='KV Cache', color='skyblue')
@@ -245,41 +257,139 @@ def generate_html(data, output_dir, plots):
                 b64 = base64.b64encode(img_data).decode("utf-8")
                 plot_imgs[key] = f"data:image/png;base64,{b64}"
     
+    # --- HTML Construction Helper ---
+    def dict_to_table(d, title):
+        rows = "".join(f"<tr><th>{k.replace('_', ' ').title()}</th><td>{v}</td></tr>" for k, v in d.items())
+        return f"<h3>{title}</h3><table>{rows}</table>"
+
+    # System Info
+    sys_info_html = dict_to_table(data.get("system_info", {}), "System Info")
+
+    # Throughput Table
+    tp_rows = ""
+    throughput_data = data.get("throughput", {})
+    # Sort by batch size
+    sorted_tp = sorted(
+        [(int(k.split("_")[1]), v) for k, v in throughput_data.items() if k.startswith("batch_")],
+        key=lambda x: x[0]
+    )
+    for bs, stats in sorted_tp:
+        tp_rows += f"<tr><td>{bs}</td><td>{stats.get('tokens_per_sec', 0):.1f}</td><td>{stats.get('total_time_sec', 0):.2f}</td></tr>"
+    
+    throughput_html = f"""
+    <h3>Throughput</h3>
+    <table>
+        <tr><th>Batch Size</th><th>Tokens/sec</th><th>Time (sec)</th></tr>
+        {tp_rows}
+    </table>
+    """
+
+    # Memory Breakdown
+    mem = data.get("memory", {})
+    mem_rows = ""
+    for k, v in mem.items():
+        label = k.replace("_gb", "").replace("_", " ").title()
+        mem_rows += f"<tr><td>{label}</td><td>{v:.2f} GB</td></tr>"
+    
+    memory_html = f"""
+    <h3>Memory Breakdown</h3>
+    <table>
+        <tr><th>Component</th><th>Size</th></tr>
+        {mem_rows}
+    </table>
+    """
+
+    # Prefill/Decode
+    pd = data.get("prefill_decode", {})
+    pd_html = f"""
+    <h3>Prefill vs Decode</h3>
+    <table>
+        <tr><th>Metric</th><th>Value</th></tr>
+        <tr><td>Prefill Time</td><td>{pd.get('prefill_time_sec', 0):.2f} s</td></tr>
+        <tr><td>Decode Time</td><td>{pd.get('decode_time_sec', 0):.2f} s</td></tr>
+        <tr><td>Ratio</td><td>{pd.get('ratio', 0):.1f}x slower</td></tr>
+        <tr><td>Per Token Decode</td><td>{pd.get('per_token_decode_ms', 0):.2f} ms</td></tr>
+    </table>
+    """
+
+    # Latency Analysis
+    lat = data.get("latency", {})
+    
+    # Output Length Impact
+    out_rows = ""
+    for item in lat.get("output_length_impact", []):
+        out_rows += f"<tr><td>{item['num_tokens']}</td><td>{item['total_time_sec']:.2f} s</td></tr>"
+    
+    latency_html = f"""
+    <h3>Output Length Impact</h3>
+    <table>
+        <tr><th>Tokens</th><th>Total Time</th></tr>
+        {out_rows}
+    </table>
+    """
+
+    # Batch Size Impact (Time per token)
+    bs_rows = ""
+    for item in lat.get("batch_size_impact", []):
+        bs_rows += f"<tr><td>{item['batch_size']}</td><td>{item['time_per_token_ms']:.2f} ms</td></tr>"
+    
+    latency_html += f"""
+    <h3>Batch Size Impact (Latency)</h3>
+    <table>
+        <tr><th>Batch Size</th><th>Time/Token</th></tr>
+        {bs_rows}
+    </table>
+    """
+
     html_content = f"""
     <html>
     <head>
         <title>LLM Profile: {data.get('model_name')}</title>
         <style>
-            body {{ font-family: sans-serif; margin: 20px; }}
-            h1, h2 {{ color: #333; }}
-            table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
-            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-            th {{ background-color: #f2f2f2; }}
-            .plot {{ text-align: center; margin: 20px 0; }}
+            body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background-color: #f9f9f9; color: #333; }}
+            h1 {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
+            h2 {{ color: #2980b9; margin-top: 30px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }}
+            h3 {{ color: #16a085; margin-top: 25px; font-size: 1.1em; }}
+            table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-left: auto; margin-right: auto; }}
+            th, td {{ border: 1px solid #e0e0e0; padding: 12px; text-align: left; }}
+            th {{ background-color: #f2f2f2; font-weight: bold; color: #555; text-transform: uppercase; font-size: 0.85em; }}
+            tr:nth-child(even) {{ background-color: #f9f9f9; }}
+            tr:hover {{ background-color: #f1f1f1; }}
+            td {{ font-family: 'Consolas', 'Monaco', monospace; font-size: 0.95em; color: #444; }}
+            .plot {{ text-align: center; margin: 30px 0; background: white; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-radius: 4px; }}
             img {{ max-width: 100%; height: auto; }}
+            .container {{ max-width: 1000px; margin: 0 auto; background: white; padding: 40px; box-shadow: 0 0 15px rgba(0,0,0,0.05); border-radius: 8px; }}
+            .meta-table td {{ font-family: sans-serif; font-weight: 500; }}
         </style>
     </head>
     <body>
-        <h1>LLM Inference Profile</h1>
-        <table>
-            <tr><th>Model</th><td>{data.get('model_name')}</td></tr>
-            <tr><th>Quantization</th><td>{data.get('quantization')}</td></tr>
-            <tr><th>Device</th><td>{data.get('device')}</td></tr>
-            <tr><th>Timestamp</th><td>{data.get('timestamp', datetime.now().isoformat())}</td></tr>
-        </table>
-        
-        <h2>Throughput</h2>
-        <div class="plot">
-            <img src="{plot_imgs.get('throughput', '')}" alt="Throughput Plot" />
+        <div class="container">
+            <h1>LLM Inference Profile</h1>
+            <table class="meta-table">
+                <tr><th>Model</th><td>{data.get('model_name')}</td></tr>
+                <tr><th>Quantization</th><td>{data.get('quantization')}</td></tr>
+                <tr><th>Device</th><td>{data.get('device')}</td></tr>
+                <tr><th>Timestamp</th><td>{data.get('timestamp', datetime.now().isoformat())}</td></tr>
+            </table>
+            
+            <h2>Visualizations</h2>
+            <div class="plot">
+                <h3>Throughput vs Batch Size</h3>
+                <img src="{plot_imgs.get('throughput', '')}" alt="Throughput Plot" />
+            </div>
+            
+            <div class="plot">
+                <h3>Memory Breakdown</h3>
+                <img src="{plot_imgs.get('memory', '')}" alt="Memory Plot" />
+            </div>
+            
+            <h2>Metrics Summary</h2>
+            {sys_info_html}
+            {throughput_html}
+            {memory_html}
+            {pd_html}
+            {latency_html}
         </div>
-        
-        <h2>Memory Breakdown</h2>
-        <div class="plot">
-            <img src="{plot_imgs.get('memory', '')}" alt="Memory Plot" />
-        </div>
-        
-        <h2>Metrics Summary</h2>
-        <pre>{json.dumps(data, indent=2)}</pre>
     </body>
     </html>
     """

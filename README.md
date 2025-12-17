@@ -108,10 +108,81 @@ llm-profile --compare "Qwen/Qwen2.5-0.5B-Instruct,Qwen/Qwen2.5-1.5B-Instruct" --
 [5/5] Generating report...
 ✓ Results saved to: ~/.llm_profiler/profiles/Qwen-Qwen2.5-1.5B-Instruct-4bit-20251217-110002.json
 
+
 🔍 Generating Comparison Report...
 ✓ Comparison JSON saved to: ~/.llm_profiler/profiles/comparison-20251217-110003.json
 ✓ Comparison plot saved to: ~/.llm_profiler/plots/comparison-20251217-110003-throughput.png
 ```
+
+### HTML Report Example
+
+A full HTML report generated for `Qwen/Qwen2.5-1.5B-Instruct` provides a comprehensive overview. Below are the actual plots and metrics from a run:
+
+#### Visualizations
+
+**Throughput vs Batch Size**
+
+![Throughput Plot](plots/Qwen-Qwen2.5-1.5B-Instruct-none-throughput.png)
+
+**Memory Breakdown**
+
+![Memory Plot](plots/Qwen-Qwen2.5-1.5B-Instruct-none-memory.png)
+
+#### Metrics Summary
+
+**System Info**
+
+| Metric | Value |
+| :--- | :--- |
+| Cuda Version | 12.8 |
+| Pytorch Version | 2.9.1+cu128 |
+| Gpu Name | NVIDIA GeForce RTX 5060 Laptop GPU |
+| Total Vram Gb | 7.96 |
+| System Ram Gb | 15.18 |
+
+**Throughput**
+
+| Batch Size | Tokens/sec | Time (sec) |
+| :--- | :--- | :--- |
+| 1 | 45.0 | 0.40 |
+| 2 | 91.1 | 0.40 |
+| 4 | 167.7 | 0.50 |
+
+**Memory Breakdown**
+
+| Component | Size |
+| :--- | :--- |
+| Weights | 2.88 GB |
+| Kv Cache | 0.00 GB |
+| Activations | 0.01 GB |
+| Total | 2.89 GB |
+
+**Prefill vs Decode**
+
+| Metric | Value |
+| :--- | :--- |
+| Prefill Time | 0.02 s |
+| Decode Time | 0.46 s |
+| Ratio | 18.4x slower |
+| Per Token Decode | 23.00 ms |
+
+**Output Length Impact**
+
+| Tokens | Total Time |
+| :--- | :--- |
+| 10 | 0.24 s |
+| 25 | 0.59 s |
+| 50 | 1.18 s |
+| 100 | 2.38 s |
+| 200 | 4.77 s |
+
+**Batch Size Impact (Latency)**
+
+| Batch Size | Time/Token |
+| :--- | :--- |
+| 1 | 22.22 ms |
+| 2 | 10.98 ms |
+| 4 | 5.96 ms |
 
 ### Quantization Testing
 
