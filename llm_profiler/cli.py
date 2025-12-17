@@ -3,7 +3,7 @@ import os
 import torch
 from pathlib import Path
 from rich.console import Console
-from llm_profiler.profiler import load_model, measure_throughput, get_vram_usage, sweep_batch_sizes, find_oom_limit
+from llm_profiler.profiler import load_model, measure_throughput, get_vram_usage, sweep_batch_sizes, find_oom_limit, measure_prefill_decode
 from llm_profiler.validation import validate_model_exists, validate_compare_models
 from llm_profiler.utils import create_quantization_config
 
@@ -69,6 +69,16 @@ def main(model, quantization, max_batch_size, max_new_tokens, device, output, ca
 
     except Exception as e:
         console.print(f"❌ Error during batch sweep: {e}", style="red")
+
+    # Prefill vs Decode (Phase 4)
+    console.print("[3/5] Measuring prefill vs decode...", style="bold blue")
+    try:
+        pd_stats = measure_prefill_decode(model_obj, tokenizer, max_new_tokens=max_new_tokens)
+        console.print(f"  Prefill (100 tokens): {pd_stats['prefill_time_sec']:.2f}s")
+        console.print(f"  Decode ({max_new_tokens} tokens):   {pd_stats['decode_time_sec']:.2f}s")
+        console.print(f"  Ratio: {pd_stats['ratio']:.1f}x slower")
+    except Exception as e:
+        console.print(f"⚠️  Warning: Failed to measure prefill/decode: {e}", style="yellow")
 
 if __name__ == "__main__":
     main()

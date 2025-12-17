@@ -1,7 +1,7 @@
 import pytest
 import torch
 from unittest.mock import MagicMock, patch
-from llm_profiler.profiler import sweep_batch_sizes, find_oom_limit
+from llm_profiler.profiler import sweep_batch_sizes, find_oom_limit, measure_prefill_decode
 
 @patch("llm_profiler.profiler.measure_throughput")
 @patch("llm_profiler.profiler.get_vram_usage")
@@ -83,3 +83,37 @@ def test_find_oom_limit_all_success():
 def test_find_oom_limit_all_oom():
     results = {1: {"status": "oom"}, 2: {"status": "oom"}}
     assert find_oom_limit(results) is None
+
+@patch("time.time")
+def test_measure_prefill_decode(mock_time):
+    """Test measure_prefill_decode calculation."""
+    # Sequence of time.time() calls in measure_prefill_decode:
+    # 1. start_prefill
+    # 2. end_prefill
+    # 3. start_gen
+    # 4. end_gen
+    
+    # We want:
+    # Prefill duration = 0.5s
+    # Total Gen duration = 6.0s
+    # Decode duration = 6.0 - 0.5 = 5.5s
+    
+    mock_time.side_effect = [
+        100.0, # start_prefill
+        100.5, # end_prefill (diff 0.5)
+        200.0, # start_gen
+        206.0  # end_gen (diff 6.0)
+    ]
+    
+    model = MagicMock()
+    model.device = "cpu" # Fix: Set a valid device
+    tokenizer = MagicMock()
+    # Mock encoding
+    tokenizer.return_value.input_ids = torch.zeros((1, 200)) # Enough tokens
+    
+    stats = measure_prefill_decode(model, tokenizer, max_new_tokens=50)
+    
+    assert stats["prefill_time_sec"] == 0.5
+    assert stats["decode_time_sec"] == 5.5
+    assert stats["ratio"] == 11.0 # 5.5 / 0.5
+    assert stats["per_token_decode_ms"] == (5.5 / 50) * 1000

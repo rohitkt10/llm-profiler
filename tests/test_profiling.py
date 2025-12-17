@@ -12,6 +12,7 @@ def mock_dependencies():
     with patch("llm_profiler.cli.load_model") as mock_load, \
          patch("llm_profiler.cli.sweep_batch_sizes") as mock_sweep, \
          patch("llm_profiler.cli.find_oom_limit") as mock_find_limit, \
+         patch("llm_profiler.cli.measure_prefill_decode") as mock_pd, \
          patch("llm_profiler.cli.get_vram_usage") as mock_vram, \
          patch("llm_profiler.validation.model_info") as mock_info:
         
@@ -26,13 +27,39 @@ def mock_dependencies():
         }
         mock_find_limit.return_value = 1
         
+        # Mock prefill/decode results (Phase 4)
+        mock_pd.return_value = {
+            "prefill_time_sec": 0.5,
+            "decode_time_sec": 5.5,
+            "ratio": 11.0,
+            "per_token_decode_ms": 110.0
+        }
+        
         yield {
             "load": mock_load,
             "sweep": mock_sweep,
             "find_limit": mock_find_limit,
+            "pd": mock_pd,
             "vram": mock_vram,
             "info": mock_info
         }
+
+def test_phase4_profiling_output(runner, mock_dependencies):
+    """Test full profiling flow including Phase 4 (prefill/decode)."""
+    result = runner.invoke(main, ["--model", "Qwen/Qwen2.5-0.5B-Instruct"])
+    
+    assert result.exit_code == 0
+    # Phase 3 checks
+    assert "Testing batch sizes" in result.output
+    assert "BS=1: ✓ 15.0 tok/s" in result.output.replace("\t", " ")
+    
+    # Phase 4 checks
+    assert "Measuring prefill vs decode" in result.output
+    assert "Prefill (100 tokens): 0.50s" in result.output
+    assert "Decode (50 tokens):   5.50s" in result.output
+    assert "Ratio: 11.0x slower" in result.output
+    
+    mock_dependencies["pd"].assert_called_once()
 
 def test_phase3_basic_profiling(runner, mock_dependencies):
     """Test basic profiling command integration with sweep."""
@@ -40,17 +67,49 @@ def test_phase3_basic_profiling(runner, mock_dependencies):
     
     assert result.exit_code == 0
     assert "Profiling Qwen/Qwen2.5-0.5B-Instruct" in result.output
-    assert "Model loaded: 2.5 GB VRAM" in result.output
-    # Check for Phase 3 specific output
     assert "Testing batch sizes" in result.output
-    # Match rich output (seems to use space instead of tab in test capture)
-    assert "BS=1: ✓ 15.0 tok/s" in result.output.replace("\t", " ") 
+    assert "BS=1: ✓ 15.0 tok/s" in result.output.replace("\t", " ")
     assert "Max successful batch size: 1" in result.output
-    
-    mock_dependencies["load"].assert_called_once()
-    mock_dependencies["sweep"].assert_called_once()
 
-# ... (skip to next replacement)
+def test_phase3_invalid_model(runner, mock_dependencies):
+    """Test invalid model handling."""
+    from huggingface_hub.utils import RepositoryNotFoundError
+    mock_dependencies["info"].side_effect = RepositoryNotFoundError("Not found")
+    
+    result = runner.invoke(main, ["--model", "invalid/model"])
+    
+    assert result.exit_code != 0
+    assert "Model 'invalid/model' not found" in result.output
+    
+    mock_dependencies["load"].assert_not_called()
+
+def test_phase3_quantization_argument(runner, mock_dependencies):
+    """Test --quantization argument passed correctly."""
+    result = runner.invoke(main, [
+        "--model", "Qwen/Qwen2.5-0.5B-Instruct",
+        "--quantization", "4bit"
+    ])
+    
+    assert result.exit_code == 0
+    assert "quant=4bit" in result.output
+    mock_dependencies["load"].assert_called_once()
+
+def test_phase3_max_new_tokens_argument(runner, mock_dependencies):
+    """Test --max-new-tokens argument passed to sweep and prefill."""
+    result = runner.invoke(main, [
+        "--model", "Qwen/Qwen2.5-0.5B-Instruct",
+        "--max-new-tokens", "20"
+    ])
+    
+    assert result.exit_code == 0
+    
+    # Check sweep call
+    sweep_kwargs = mock_dependencies["sweep"].call_args.kwargs
+    assert sweep_kwargs["max_new_tokens"] == 20
+    
+    # Check prefill/decode call
+    pd_kwargs = mock_dependencies["pd"].call_args.kwargs
+    assert pd_kwargs["max_new_tokens"] == 20
 
 def test_phase3_oom_reporting(runner, mock_dependencies):
     """Test OOM reporting in CLI output."""

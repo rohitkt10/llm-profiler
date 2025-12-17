@@ -149,3 +149,74 @@ def find_oom_limit(results):
     if not successful_bs:
         return None
     return max(successful_bs)
+
+def measure_prefill_decode(model, tokenizer, max_new_tokens: int = 50):
+    """
+    Measures timing for prefill (100 tokens) vs decode (max_new_tokens).
+    Returns dict with timing stats.
+    """
+    device = model.device
+    
+    # Create ~100 token input
+    # We create a long text and truncate
+    dummy_text = "test " * 150
+    encoded = tokenizer(dummy_text, return_tensors="pt")
+    # Ensure we don't exceed model context if model context is small, but 100 is small enough.
+    # Also handle case where tokenization produces < 100 tokens (unlikely with this text)
+    if encoded.input_ids.shape[1] < 100:
+        # Pad if needed, but "test " * 150 is >> 100 tokens
+        pass
+        
+    input_ids = encoded.input_ids[:, :100].to(device)
+    attention_mask = torch.ones_like(input_ids)
+    
+    # Warmup (simple forward pass)
+    with torch.no_grad():
+        model(input_ids)
+        
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        
+    # Measure Prefill (Forward pass only)
+    start_prefill = time.time()
+    with torch.no_grad():
+        model(input_ids, attention_mask=attention_mask)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    end_prefill = time.time()
+    prefill_duration = end_prefill - start_prefill
+    
+    # Measure Generation (Prefill + Decode)
+    start_gen = time.time()
+    with torch.no_grad():
+        model.generate(
+            input_ids, 
+            attention_mask=attention_mask,
+            max_new_tokens=max_new_tokens, 
+            min_new_tokens=max_new_tokens,
+            pad_token_id=tokenizer.pad_token_id
+        )
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    end_gen = time.time()
+    total_gen_duration = end_gen - start_gen
+    
+    # Decode duration ~= Total - Prefill
+    decode_duration = max(0.0001, total_gen_duration - prefill_duration) # Prevent div/0 or negative
+    
+    # Ratio: Decode Time / Prefill Time (total times)
+    # PRD says: "Ratio showing how many times slower decode is compared to prefill"
+    # Usually this compares throughput or just total latency. 
+    # Example: Prefill 0.34s, Decode 6.12s -> Ratio 18x slower.
+    # This implies straight division of durations.
+    ratio = decode_duration / prefill_duration if prefill_duration > 0.0001 else 0.0
+    
+    # Per token decode
+    per_token_ms = (decode_duration / max_new_tokens) * 1000 if max_new_tokens > 0 else 0.0
+    
+    return {
+        "prefill_time_sec": prefill_duration,
+        "decode_time_sec": decode_duration,
+        "ratio": ratio,
+        "per_token_decode_ms": per_token_ms
+    }
