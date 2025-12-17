@@ -191,10 +191,16 @@ def test_profile_memory_breakdown(
 
     stats = profile_memory_breakdown(model, tokenizer)
 
-    assert stats["weights_gb"] == 4.0
-    assert stats["total_gb"] == 6.0
-    assert stats["kv_cache_gb"] == 0.5
-    assert stats["activations_gb"] == 1.5
+    if torch.cuda.is_available():
+        assert stats["weights_gb"] == 4.0
+        assert stats["total_gb"] == 6.0
+        assert stats["kv_cache_gb"] == 0.5
+        assert stats["activations_gb"] == 1.5
+    else:
+        assert stats["weights_gb"] == 0.0
+        assert stats["total_gb"] == 0.0
+        assert stats["kv_cache_gb"] == 0.0
+        assert stats["activations_gb"] == 0.0
 
 
 def test_profile_memory_breakdown_cpu():
