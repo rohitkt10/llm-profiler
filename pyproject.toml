@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-profiler"
+version = "0.1.0"
+description = "A CLI tool to benchmark LLM inference performance."
+authors = [{name = "Rohit", email = "rohit@example.com"}]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "transformers>=4.30.0",
+    "bitsandbytes>=0.41.0",
+    "torch>=2.0.0",
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "matplotlib>=3.7.0",
+    "psutil>=5.9.0",
+    "huggingface-hub>=0.16.0",
+    "accelerate>=0.26.0"
+]
+
+[project.scripts]
+llm-profile = "llm_profiler.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["llm_profiler*"]
