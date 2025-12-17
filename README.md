@@ -9,7 +9,7 @@ A professional command-line tool that automatically benchmarks and profiles the 
 - **Prefill vs Decode**: Measures input processing speed vs generation speed.
 - **Memory & Latency Breakdown**: Analyzes VRAM usage and generation latency vs output length.
 - **Quantization Support**: Easy testing of 4-bit, 8-bit, fp16, and bf16 precision.
-- **JSON Reporting**: Generates structured JSON reports with all metrics.
+- **JSON & Visualization**: Generates structured JSON reports and visualization plots (throughput/memory).
 
 ## Installation
 
@@ -62,7 +62,9 @@ llm-profile --model "Qwen/Qwen2.5-0.5B-Instruct" --max-batch-size 4 --max-new-to
     100 tokens: 1.55s
     200 tokens: 3.20s
 [5/5] Generating report...
-✓ Results saved to: ~/.llm_profiler/profiles/Qwen-Qwen2.5-0.5B-Instruct-none-20251217-104043.json
+✓ Results saved to: ~/.llm_profiler/profiles/Qwen-Qwen2.5-0.5B-Instruct-none-20251217-104715.json
+✓ Plot saved to: ~/.llm_profiler/plots/Qwen-Qwen2.5-0.5B-Instruct-none-throughput.png
+✓ Plot saved to: ~/.llm_profiler/plots/Qwen-Qwen2.5-0.5B-Instruct-none-memory.png
 ```
 
 ### Quantization Testing

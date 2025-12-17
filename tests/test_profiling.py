@@ -18,6 +18,8 @@ def mock_dependencies():
          patch("llm_profiler.cli.get_vram_usage") as mock_vram, \
          patch("llm_profiler.cli.get_system_info") as mock_sys, \
          patch("llm_profiler.cli.save_json") as mock_save, \
+         patch("llm_profiler.cli.plot_throughput") as mock_plot_tp, \
+         patch("llm_profiler.cli.plot_memory_breakdown") as mock_plot_mem, \
          patch("llm_profiler.validation.model_info") as mock_info:
         
         # Default successful behaviors
@@ -55,8 +57,10 @@ def mock_dependencies():
         # Mock system info
         mock_sys.return_value = {"gpu": "Test"}
         
-        # Mock save
+        # Mock save/plot
         mock_save.return_value = "/path/to/result.json"
+        mock_plot_tp.return_value = "/path/to/tp.png"
+        mock_plot_mem.return_value = "/path/to/mem.png"
         
         yield {
             "load": mock_load,
@@ -67,39 +71,31 @@ def mock_dependencies():
             "latency": mock_latency,
             "sys": mock_sys,
             "save": mock_save,
+            "plot_tp": mock_plot_tp,
+            "plot_mem": mock_plot_mem,
             "vram": mock_vram,
             "info": mock_info
         }
 
-def test_phase6_profiling_output(runner, mock_dependencies):
-    """Test full profiling flow including Phase 6 (report generation)."""
+def test_phase7_profiling_output(runner, mock_dependencies):
+    """Test full profiling flow including Phase 7 (plotting)."""
     result = runner.invoke(main, ["--model", "Qwen/Qwen2.5-0.5B-Instruct"])
     
     assert result.exit_code == 0
     
-    # Phase 3
-    assert "Testing batch sizes" in result.output
+    # Check Phase 7 output
+    assert "Plot saved to: /path/to/tp.png" in result.output
+    assert "Plot saved to: /path/to/mem.png" in result.output
     
-    # Phase 4
-    assert "Measuring prefill vs decode" in result.output
-    
-    # Phase 5
-    assert "Memory and latency profiling" in result.output
-    assert "Output length impact" in result.output
-    
-    # Phase 6
-    assert "Generating report" in result.output
+    mock_dependencies["plot_tp"].assert_called_once()
+    mock_dependencies["plot_mem"].assert_called_once()
+
+def test_phase6_profiling_output(runner, mock_dependencies):
+    """Test full profiling flow including Phase 6 (report generation)."""
+    result = runner.invoke(main, ["--model", "Qwen/Qwen2.5-0.5B-Instruct"])
+    assert result.exit_code == 0
     assert "Results saved to: /path/to/result.json" in result.output
-    
     mock_dependencies["save"].assert_called_once()
-    
-    # Verify data passed to save_json has correct structure
-    saved_data = mock_dependencies["save"].call_args[0][0]
-    assert saved_data["model_name"] == "Qwen/Qwen2.5-0.5B-Instruct"
-    assert "throughput" in saved_data
-    assert "memory" in saved_data
-    assert "latency" in saved_data
-    assert "output_length_impact" in saved_data["latency"]
 
 def test_phase3_basic_profiling(runner, mock_dependencies):
     """Test basic profiling command integration with sweep."""

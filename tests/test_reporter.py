@@ -2,7 +2,7 @@ import pytest
 import json
 import os
 from unittest.mock import patch, MagicMock
-from llm_profiler.reporter import save_json, get_system_info
+from llm_profiler.reporter import save_json, get_system_info, plot_throughput, plot_memory_breakdown
 
 def test_get_system_info():
     with patch("torch.cuda.is_available", return_value=True), \
@@ -33,3 +33,39 @@ def test_save_json(tmp_path):
         loaded = json.load(f)
         assert loaded["model_name"] == "test/model"
         assert "timestamp" in loaded
+
+@patch("matplotlib.pyplot.savefig")
+@patch("matplotlib.pyplot.close")
+def test_plot_throughput(mock_close, mock_save, tmp_path):
+    sweep_results = {
+        1: {"status": "success", "throughput": 10.0},
+        2: {"status": "success", "throughput": 20.0},
+        4: {"status": "oom"}
+    }
+    
+    filepath = plot_throughput(sweep_results, str(tmp_path), "test/model", "none")
+    
+    assert "test-model-none-throughput.png" in filepath
+    mock_save.assert_called_once()
+    mock_close.assert_called_once()
+
+@patch("matplotlib.pyplot.savefig")
+@patch("matplotlib.pyplot.close")
+@patch("llm_profiler.reporter.calculate_kv_cache_size")
+def test_plot_memory_breakdown(mock_calc, mock_close, mock_save, tmp_path):
+    sweep_results = {
+        1: {"status": "success", "vram_gb": 4.5}, # Weights 4.0 + KV 0.1 + Act 0.4
+        2: {"status": "success", "vram_gb": 5.0}, # Weights 4.0 + KV 0.2 + Act 0.8
+    }
+    model = MagicMock()
+    tokenizer = MagicMock()
+    tokenizer.encode.return_value = [1]*10 # length 10
+    
+    mock_calc.return_value = 0.1 # Simplification: returns constant or we can side_effect
+    
+    filepath = plot_memory_breakdown(sweep_results, str(tmp_path), "test/model", "none", model, tokenizer, 50, 4.0)
+    
+    assert "test-model-none-memory.png" in filepath
+    mock_save.assert_called_once()
+    mock_close.assert_called_once()
+    assert mock_calc.call_count == 2 # Called for BS 1 and 2

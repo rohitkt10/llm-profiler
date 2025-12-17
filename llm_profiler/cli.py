@@ -6,7 +6,7 @@ from rich.console import Console
 from llm_profiler.profiler import load_model, measure_throughput, get_vram_usage, sweep_batch_sizes, find_oom_limit, measure_prefill_decode, profile_memory_breakdown, measure_output_length_impact
 from llm_profiler.validation import validate_model_exists, validate_compare_models
 from llm_profiler.utils import create_quantization_config
-from llm_profiler.reporter import get_system_info, save_json
+from llm_profiler.reporter import get_system_info, save_json, plot_throughput, plot_memory_breakdown
 
 console = Console()
 
@@ -101,8 +101,10 @@ def main(model, quantization, max_batch_size, max_new_tokens, device, output, ca
 
     # Memory and Latency Breakdown (Phase 5)
     console.print("[4/5] Memory and latency profiling...", style="bold blue")
+    weights_gb = 0.0 # Default
     try:
         mem_stats = profile_memory_breakdown(model_obj, tokenizer, batch_size=1, seq_len=100)
+        weights_gb = mem_stats['weights_gb']
         console.print(f"  Model weights: {mem_stats['weights_gb']:.2f} GB")
         console.print(f"  KV cache (BS=1, 100 tokens): {mem_stats['kv_cache_gb']:.2f} GB")
         console.print(f"  Activation memory: {mem_stats['activations_gb']:.2f} GB")
@@ -112,7 +114,6 @@ def main(model, quantization, max_batch_size, max_new_tokens, device, output, ca
         console.print("  Output length impact:")
         latency_stats = measure_output_length_impact(model_obj, tokenizer)
         
-        # Format for JSON: "output_length_impact": [{"num_tokens": 10, "total_time_sec": ...}]
         output_impact_list = []
         for length, duration in latency_stats.items():
             if duration is not None:
@@ -121,11 +122,9 @@ def main(model, quantization, max_batch_size, max_new_tokens, device, output, ca
             else:
                 console.print(f"    {length} tokens: Failed", style="red")
         
-        # Batch size impact is derived from sweep results
         batch_impact_list = []
         for bs, res in results.items():
             if res.get("status") == "success":
-                # Time per token = duration / (bs * max_new_tokens) * 1000
                 total_tokens = bs * max_new_tokens
                 time_per_token_ms = (res['duration'] / total_tokens) * 1000
                 batch_impact_list.append({"batch_size": bs, "time_per_token_ms": time_per_token_ms})
@@ -138,16 +137,19 @@ def main(model, quantization, max_batch_size, max_new_tokens, device, output, ca
     except Exception as e:
         console.print(f"⚠️  Warning: Failed to measure memory/latency: {e}", style="yellow")
 
-    # Report Generation (Phase 6)
+    # Report Generation (Phase 6/7)
     console.print("[5/5] Generating report...", style="bold blue")
     try:
-        if output == "json":
-            saved_path = save_json(profiling_data, cache_dir)
-            console.print(f"✓ Results saved to: {saved_path}", style="bold green")
-        else:
-            console.print(f"⚠️  Output format '{output}' not yet implemented. Saving JSON instead.", style="yellow")
-            saved_path = save_json(profiling_data, cache_dir)
-            console.print(f"✓ Results saved to: {saved_path}", style="bold green")
+        saved_json = save_json(profiling_data, cache_dir)
+        console.print(f"✓ Results saved to: {saved_json}", style="bold green")
+        
+        # Plots (Phase 7)
+        plot_tp = plot_throughput(results, cache_dir, model, quantization)
+        console.print(f"✓ Plot saved to: {plot_tp}", style="bold green")
+        
+        plot_mem = plot_memory_breakdown(results, cache_dir, model, quantization, model_obj, tokenizer, max_new_tokens, weights_gb)
+        if plot_mem:
+            console.print(f"✓ Plot saved to: {plot_mem}", style="bold green")
             
     except Exception as e:
         console.print(f"❌ Error generating report: {e}", style="red")
